@@ -1,14 +1,16 @@
 import os
 
 import yagmail
+from dotenv import load_dotenv
 from loguru import logger
 
+load_dotenv()
 
 def send_email(to, subject, contents, attachments=None):
 
     try:
-        sender_email = os.environ.get("EMAIL_SENDER")
-        sender_password = os.environ.get("EMAIL_PASS")
+        sender_email = os.getenv("EMAIL_SENDER")
+        sender_password = os.getenv("EMAIL_PASS")
 
         if not sender_email or not sender_password:
             raise ValueError("Sender email or password not found in .env file!")
