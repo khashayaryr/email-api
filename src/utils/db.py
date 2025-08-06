@@ -71,10 +71,9 @@ class DatabaseHandler:
     # --- Email Scheduling and History Methods ---
     def schedule_email(
         self, subject, body, recipients, schedule_time, sender_profile,
-        add_signature=True, attachments=None,
+        add_signature=True, attachments=None, reminder_date=None, # <-- ADD THIS
     ):
-        """Schedules an email to be sent, including attachments."""
-        # Ensure attachments is a list if None is passed
+        """Schedules an email to be sent, including attachments and an optional reminder."""
         if attachments is None:
             attachments = []
 
@@ -86,9 +85,10 @@ class DatabaseHandler:
             "status": "scheduled",
             "schedule_time": schedule_time.isoformat(),
             "sent_time": None,
-            "reminder_date": None,
+            # Save the reminder date if provided, otherwise save None
+            "reminder_date": reminder_date.isoformat() if reminder_date else None, # <-- ADD THIS
             "add_signature": add_signature,
-            "attachments": attachments,  # <-- ADD THIS NEW FIELD
+            "attachments": attachments,
         })
 
     def get_scheduled_emails(self):
@@ -147,3 +147,15 @@ class DatabaseHandler:
             {"status": new_status, "sent_time": datetime.now().isoformat()},
             doc_ids=[email_id],
         )
+
+    def set_email_reminder(self, email_doc_id, reminder_date):
+        """Sets or updates the reminder date for a specific email."""
+        self.emails_table.update(
+            {"reminder_date": reminder_date.isoformat()},
+            doc_ids=[email_doc_id],
+        )
+
+    def clear_email_reminder(self, email_doc_id):
+        """Removes the reminder date from a specific email."""
+        # We update the field to be None
+        self.emails_table.update({"reminder_date": None}, doc_ids=[email_doc_id])
