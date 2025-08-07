@@ -1,14 +1,20 @@
-from datetime import datetime
+import re
+from datetime import date, datetime
+from typing import Any
 
 from tinydb import Query, TinyDB, where
 
+# A type alias for a TinyDB Document for cleaner annotations
+Document = dict[str, Any]
+
 
 class DatabaseHandler:
-    """A class to handle all database operations with TinyDB for the Streamlit Email App.
-    """
+    """A class to handle all database operations with TinyDB for the Streamlit Email App."""
 
-    def __init__(self, db_file="db.json"):
+    def __init__(self, db_file: str = "db.json"):
         """Initializes the database and creates tables if they don't exist.
+
+        :param db_file: The path to the database file.
         """
         self.db = TinyDB(db_file)
         self.profiles_table = self.db.table("profiles")
@@ -17,145 +23,192 @@ class DatabaseHandler:
         self.emails_table = self.db.table("emails")
 
     # --- User Profile Methods ---
-    def get_user_profile(self):
-        """Retrieves the user's profile. Assumes only one user profile."""
-        return self.user_profile_table.get(doc_id=1)
+    def get_user_profile(self) -> Document | None:
+        """Retrieves the user's profile. Assumes only one user profile exists.
 
-    def update_user_profile(self, data):
-        """Creates or updates the user's profile.
-        For a single-profile setup, we clear the table and insert the new profile.
+        :return: The user profile document or None if it doesn't exist.
         """
-        # Clear the entire table first to ensure only one profile exists
+        # More robust way to get the single profile, as doc_id is not guaranteed
+        if self.user_profile_table:
+            return self.user_profile_table.all()[0]
+        return None
+
+    def update_user_profile(self, data: Document) -> None:
+        """Creates or updates the user's profile.
+
+        For a single-profile setup, this method clears the table and inserts the new profile.
+
+        :param data: A dictionary containing the user's profile information.
+        """
         self.user_profile_table.truncate()
-        # Insert the new profile data as the single document
         self.user_profile_table.insert(data)
 
     # --- Contact Profiles Methods ---
-    def add_profile(self, name, email, title, profession):
-        """Adds a new contact profile to the database."""
+    def add_profile(self, name: str, email: str, title: str, profession: str) -> bool:
+        """Adds a new contact profile to the database if the email is unique.
+
+        :param name: The contact's full name.
+        :param email: The contact's email address.
+        :param title: The contact's job title.
+        :param profession: The contact's profession or industry.
+        :return: True if the profile was added successfully, False otherwise.
+        """
         if not self.profiles_table.contains(where("email") == email):
             self.profiles_table.insert({
-                "name": name,
-                "email": email,
-                "title": title,
-                "profession": profession,
+                "name": name, "email": email, "title": title, "profession": profession,
             })
             return True
-        return False # Profile with this email already exists
+        return False
 
-    def get_all_profiles(self):
-        """Retrieves all contact profiles."""
+    def get_all_profiles(self) -> list[Document]:
+        """Retrieves all contact profiles.
+
+        :return: A list of all profile documents.
+        """
         return self.profiles_table.all()
 
-    def delete_profile(self, doc_id):
-        """Deletes a contact profile by its document ID."""
+    def delete_profile(self, doc_id: int) -> None:
+        """Deletes a contact profile by its document ID.
+
+        :param doc_id: The unique document ID of the profile to delete.
+        """
         self.profiles_table.remove(doc_ids=[doc_id])
 
     # --- Email Templates Methods ---
-    def add_template(self, name, subject, body):
-        """Adds a new email template if the name doesn't already exist."""
-        # Add a check for existing template name
+    def add_template(self, name: str, subject: str, body: str) -> bool:
+        """Adds a new email template if the name is unique.
+
+        :param name: The name of the template.
+        :param subject: The subject line of the template.
+        :param body: The body content of the template.
+        :return: True if the template was added successfully, False otherwise.
+        """
         if not self.templates_table.contains(where("name") == name):
             self.templates_table.insert({"name": name, "subject": subject, "body": body})
             return True
-        return False # Template with this name already exists
+        return False
 
-    def get_all_templates(self):
-        """Retrieves all email templates."""
+    def get_all_templates(self) -> list[Document]:
+        """Retrieves all email templates.
+
+        :return: A list of all template documents.
+        """
         return self.templates_table.all()
 
-    def delete_template(self, doc_id):
-        """Deletes a template by its document ID."""
+    def delete_template(self, doc_id: int) -> None:
+        """Deletes a template by its document ID.
+
+        :param doc_id: The unique document ID of the template to delete.
+        """
         self.templates_table.remove(doc_ids=[doc_id])
 
     # --- Email Scheduling and History Methods ---
     def schedule_email(
-        self, subject, body, recipients, schedule_time, sender_profile,
-        add_signature=True, attachments=None, reminder_date=None, # <-- ADD THIS
-    ):
-        """Schedules an email to be sent, including attachments and an optional reminder."""
+        self, subject: str, body: str, recipients: list[int], schedule_time: datetime,
+        sender_profile: Document, add_signature: bool = True,
+        attachments: list[str] | None = None, reminder_date: date | None = None,
+    ) -> None:
+        """Schedules an email to be sent.
+
+        :param subject: The email subject.
+        :param body: The email body template.
+        :param recipients: A list of recipient profile document IDs.
+        :param schedule_time: The datetime object for when to send the email.
+        :param sender_profile: A snapshot of the sender's profile.
+        :param add_signature: Whether to add the user's signature to the email.
+        :param attachments: A list of file paths for attachments.
+        :param reminder_date: An optional date for a follow-up reminder.
+        """
         if attachments is None:
             attachments = []
 
         self.emails_table.insert({
-            "subject": subject,
-            "body": body,
-            "recipients": recipients,
-            "sender_profile": sender_profile,
-            "status": "scheduled",
-            "schedule_time": schedule_time.isoformat(),
-            "sent_time": None,
-            # Save the reminder date if provided, otherwise save None
-            "reminder_date": reminder_date.isoformat() if reminder_date else None, # <-- ADD THIS
-            "add_signature": add_signature,
-            "attachments": attachments,
+            "subject": subject, "body": body, "recipients": recipients,
+            "sender_profile": sender_profile, "status": "scheduled",
+            "schedule_time": schedule_time.isoformat(), "sent_time": None,
+            "reminder_date": reminder_date.isoformat() if reminder_date else None,
+            "add_signature": add_signature, "attachments": attachments,
         })
 
-    def get_scheduled_emails(self):
-        """Retrieves all emails with 'scheduled' status."""
+    def get_scheduled_emails(self) -> list[Document]:
+        """Retrieves all emails with the status 'scheduled'.
+
+        :return: A list of scheduled email documents.
+        """
         Email = Query()
         return self.emails_table.search(Email.status == "scheduled")
 
-    def delete_scheduled_email(self, email_doc_id):
-        """Deletes an email from the emails_table by its document ID."""
+    def delete_scheduled_email(self, email_doc_id: int) -> None:
+        """Deletes a scheduled email by its document ID.
+
+        :param email_doc_id: The document ID of the scheduled email to delete.
+        """
         self.emails_table.remove(doc_ids=[email_doc_id])
 
-    def get_sent_emails(self):
-        """Retrieves all emails with 'sent' status."""
+    def get_sent_emails(self) -> list[Document]:
+        """Retrieves all emails with the status 'sent'.
+
+        :return: A list of sent email documents.
+        """
         Email = Query()
         return self.emails_table.search(Email.status == "sent")
 
-    def search_emails(self, search_term):
-        """Searches sent emails for a specific term in subject or body."""
+    def search_emails(self, search_term: str) -> list[Document]:
+        """Searches sent emails for a term in the subject or body, case-insensitively.
+
+        :param search_term: The string to search for.
+        :return: A list of matching sent email documents.
+        """
         Email = Query()
-        # A simple search query
         return self.emails_table.search(
             (Email.status == "sent") &
-            ((Email.subject.search(search_term)) | (Email.body.search(search_term))),
+            (
+                (Email.subject.search(search_term, flags=re.IGNORECASE)) |
+                (Email.body.search(search_term, flags=re.IGNORECASE))
+            ),
         )
 
-    # --- Reminder Methods ---
-    def set_reminder(self, email_doc_id, reminder_date):
-        """Sets a follow-up reminder for a sent email."""
-        self.emails_table.update(
-            {"reminder_date": reminder_date.isoformat()},
-            doc_ids=[email_doc_id],
-        )
+    def get_due_emails(self) -> list[Document]:
+        """Retrieves scheduled emails where the schedule_time is in the past.
 
-    def get_reminders(self):
-        """Retrieves all emails that have a reminder set."""
-        Email = Query()
-        return self.emails_table.search(Email.reminder_date.exists())
-
-    def close_db(self):
-        """Closes the database connection."""
-        self.db.close()
-
-    def get_due_emails(self):
-        """Retrieves all emails with 'scheduled' status where the schedule_time is in the past.
+        :return: A list of due email documents.
         """
         Email = Query()
         now_iso = datetime.now().isoformat()
-        # Find emails that are scheduled and whose schedule time is less than or equal to now
         return self.emails_table.search(
             (Email.status == "scheduled") & (Email.schedule_time <= now_iso),
         )
 
-    def update_email_status(self, email_id, new_status):
-        """Updates the status of an email (e.g., to 'sent') and records the sent time."""
+    def update_email_status(self, email_id: int, new_status: str) -> None:
+        """Updates an email's status (e.g., to 'sent') and records the sent time.
+
+        :param email_id: The document ID of the email to update.
+        :param new_status: The new status string (e.g., 'sent', 'failed').
+        """
         self.emails_table.update(
             {"status": new_status, "sent_time": datetime.now().isoformat()},
             doc_ids=[email_id],
         )
 
-    def set_email_reminder(self, email_doc_id, reminder_date):
-        """Sets or updates the reminder date for a specific email."""
+    # --- Reminder Methods ---
+    def set_email_reminder(self, email_doc_id: int, reminder_date: date) -> None:
+        """Sets or updates the reminder date for a specific email.
+
+        :param email_doc_id: The document ID of the email to set a reminder for.
+        :param reminder_date: The date object for the reminder.
+        """
         self.emails_table.update(
             {"reminder_date": reminder_date.isoformat()},
             doc_ids=[email_doc_id],
         )
 
-    def clear_email_reminder(self, email_doc_id):
-        """Removes the reminder date from a specific email."""
-        # We update the field to be None
+    def clear_email_reminder(self, email_doc_id: int) -> None:
+        """Removes the reminder date from a specific email by setting it to None.
+
+        :param email_doc_id: The document ID of the email to clear the reminder from.
+        """
         self.emails_table.update({"reminder_date": None}, doc_ids=[email_doc_id])
+
+    def close_db(self) -> None:
+        """Closes the database connection."""
+        self.db.close()
