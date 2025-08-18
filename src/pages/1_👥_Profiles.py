@@ -1,14 +1,23 @@
 import streamlit as st
 
+from utils.time import set_runtime_tz
+from utils.ui import render_settings_sidebar
+
+# Page config MUST be first
+st.set_page_config(page_title="Contact Profiles", page_icon="👥")
+
 # Ensure the db_handler is initialized
 if "db_handler" not in st.session_state:
     st.error("Database handler not initialized. Please go to the Home page first.")
     st.stop()
 
-# Access the handler from session state
 db = st.session_state.db_handler
 
-st.set_page_config(page_title="Contact Profiles", page_icon="👥")
+# TZ + settings sidebar
+tz_saved = db.get_timezone()
+if tz_saved:
+    set_runtime_tz(tz_saved)
+render_settings_sidebar(db)
 
 st.title("👥 Contact Profiles")
 st.write("Manage the profiles of people you want to email. You can add, edit, or delete profiles here.")
@@ -24,9 +33,7 @@ with st.expander("➕ Add New Profile", expanded=False):
 
         submitted = st.form_submit_button("Add Profile")
         if submitted:
-            # Basic validation
             if name and email:
-                # Call the database handler method
                 success = db.add_profile(name=name, email=email, title=title, profession=profession)
                 if success:
                     st.success(f"✅ Profile for '{name}' added successfully!")
@@ -44,36 +51,24 @@ all_profiles = db.get_all_profiles()
 if not all_profiles:
     st.info("No profiles found. Add a new profile using the form above.")
 else:
-    # Create columns for the header
     col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 1])
-    with col1:
-        st.write("**Name**")
-    with col2:
-        st.write("**Email**")
-    with col3:
-        st.write("**Title**")
-    with col4:
-        st.write("**Profession**")
-    with col5:
-        st.write("**Actions**")
+    with col1: st.write("**Name**")
+    with col2: st.write("**Email**")
+    with col3: st.write("**Title**")
+    with col4: st.write("**Profession**")
+    with col5: st.write("**Actions**")
 
     st.markdown("---")
 
-    # Display each profile with a delete button
     for profile in all_profiles:
         profile_id = profile.doc_id
         col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 1])
 
-        with col1:
-            st.write(profile.get("name", "N/A"))
-        with col2:
-            st.write(profile.get("email", "N/A"))
-        with col3:
-            st.write(profile.get("title", "N/A"))
-        with col4:
-            st.write(profile.get("profession", "N/A"))
+        with col1: st.write(profile.get("name", "N/A"))
+        with col2: st.write(profile.get("email", "N/A"))
+        with col3: st.write(profile.get("title", "N/A"))
+        with col4: st.write(profile.get("profession", "N/A"))
         with col5:
-            # Use the profile's unique doc_id for the button key
             if st.button("🗑️", key=f"delete_{profile_id}", help="Delete this profile"):
                 db.delete_profile(profile_id)
-                st.rerun() # Rerun the script to refresh the list immediately
+                st.rerun()
