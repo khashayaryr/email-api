@@ -3,10 +3,8 @@ import streamlit as st
 from utils.time import set_runtime_tz
 from utils.ui import render_settings_sidebar
 
-# Page config MUST be first
 st.set_page_config(page_title="Contact Profiles", page_icon="👥")
 
-# Ensure the db_handler is initialized
 if "db_handler" not in st.session_state:
     st.error("Database handler not initialized. Please go to the Home page first.")
     st.stop()
