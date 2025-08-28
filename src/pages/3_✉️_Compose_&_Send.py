@@ -8,14 +8,14 @@ from utils.helpers import render_email_body
 from utils.time import set_runtime_tz
 from utils.ui import render_settings_sidebar
 
-# --- Page Configuration (must be the first Streamlit call) ---
+# --- Page Configuration ---
 st.set_page_config(page_title="Compose & Send", page_icon="✉️", layout="wide")
 
 # --- Init DB handler ---
 if "db_handler" not in st.session_state:
     st.error("Database handler not initialized. Please go to the Home page first.")
     st.stop()
-db = st.session_state.db_handler  # now we have db
+db = st.session_state.db_handler
 
 # --- Settings sidebar & timezone (requires db) ---
 tz_saved = db.get_timezone()
