@@ -1,3 +1,26 @@
+"""Home (Dashboard) page for the Streamlit Email Assistant.
+
+This module renders the main dashboard with:
+- A hero image (if present at `src/pages/assets/home_hero.png`).
+- A compact settings sidebar (timezone selection is wired via `render_settings_sidebar`).
+- Key statistics (sent/scheduled/partial/failed counts and upcoming reminders).
+- A searchable list of sent campaigns.
+- A "recent activity" section with the latest completed campaigns.
+- Per-campaign delivery logs (per-recipient outcomes).
+
+It relies on:
+- `utils.db.DatabaseHandler` (TinyDB) as the persistence layer.
+- `utils.time` for timezone-aware conversions between stored UTC ISO strings and local time.
+- `utils.ui` for the settings sidebar.
+
+Notes
+-----
+- Time values are stored in UTC ISO strings (with "Z") and converted to the app's
+  local timezone for display.
+- Campaigns (rows in `emails` table) aggregate per-recipient deliveries (rows in
+  `deliveries` table). Delivery logs shown here are derived from the deliveries.
+"""
+
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -48,6 +71,18 @@ now_local: datetime = datetime.now(get_app_tz())
 thirty_days_ago: datetime = now_local - timedelta(days=30)
 
 def dt_local(s: str | None) -> datetime | None:
+    """Convert a stored UTC ISO string to a timezone-aware local datetime.
+
+    Parameters
+    ----------
+    s : str | None
+        An ISO 8601 string (e.g., "2025-08-11T11:13:57.701269Z") or None.
+
+    Returns
+    -------
+    datetime | None
+        A timezone-aware datetime in the app's local timezone, or None if input is falsy/invalid.
+    """
     return parse_iso_to_local(s)
 
 sent_emails = [e for e in all_emails if e.get("status") == "sent"]
@@ -77,10 +112,39 @@ with col5: st.metric("Failed (Last 30 Days)", len(failed_last_30_days))
 st.divider()
 
 def status_badge(status: str) -> str:
+    """Return a small Markdown badge for a campaign status.
+
+    Parameters
+    ----------
+    status : str
+        One of {"sent", "partial", "failed", "scheduled"} (case-insensitive). Any other
+        string is returned in bold without an icon.
+
+    Returns
+    -------
+    str
+        A Markdown-formatted string with an icon + bolded status label.
+    """
     s = (status or "").lower()
     return {"sent":"✅ **sent**","partial":"🟡 **partial**","failed":"❌ **failed**","scheduled":"🕒 **scheduled**"}.get(s, f"**{status}**")
 
 def display_delivery_log(email: Document) -> None:
+    """Render the per-recipient delivery log for a campaign.
+
+    This function looks up all deliveries tied to the given campaign (email),
+    sorts them by last attempt (or sent time), and prints a compact list with
+    recipient, status, timestamp (local), and error (if any).
+
+    Parameters
+    ----------
+    email : dict[str, Any]
+        The campaign document (row from `emails` table) whose deliveries should be displayed.
+
+    Returns
+    -------
+    None
+        This function renders directly to the Streamlit app.
+    """
     deliveries = db.get_deliveries_for_campaign(email.doc_id)
     if not deliveries:
         st.info("No delivery entries for this campaign yet.")
@@ -105,6 +169,20 @@ def display_delivery_log(email: Document) -> None:
         )
 
 def display_email_entry(email: Document, profile_map: dict[int, Document]) -> None:
+    """Render a single campaign entry with recipients, subject, status, and body/log expanders.
+
+    Parameters
+    ----------
+    email : dict[str, Any]
+        The campaign (row from `emails` table) to display.
+    profile_map : dict[int, dict[str, Any]]
+        Mapping from profile doc_id to profile document; used to show recipient names.
+
+    Returns
+    -------
+    None
+        This function renders directly to the Streamlit app.
+    """
     # Build recipient names from profiles for quick glance
     recipient_ids: list[int] = email.get("recipients", [])
     recipient_names: list[str] = [profile_map.get(rid, {}).get("name", "Unknown") for rid in recipient_ids]
